@@ -1,0 +1,4 @@
+[workspace]
+members = [
+    "nrf52-radio-802154",
+    ]
