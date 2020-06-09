@@ -53,6 +53,7 @@ pub const CRC_POLYNOMIAL: u32 = 0x0001_1021;
 pub const CCA_ED_THRESHOLD_DEFAULT: u8 = 20;
 pub const CCA_CORR_THRESHOLD_DEFAULT: u8 = 20;
 pub const CCA_CORR_LIMIT_DEFAULT: u8 = 2;
+pub const SFD_DEFAULT: u8 = 0xA7;
 pub const MHMU_MASK: u32 = 0xff0_00700;
 
 pub type PacketBuffer = [u8; MAX_PACKET_LENGHT as usize];
@@ -100,7 +101,7 @@ fn configure_interrupts(radio: &mut RADIO) {
     });
 }
 
-pub const STATE_SEND: u32 = 0b_0000_0000_0000_0000_0000_0000_0000_0001;
+pub const STATE_SEND: u32 = 1 << 0;
 
 /// # 802.15.4 PHY layer implementation for nRF Radio
 ///
@@ -134,12 +135,34 @@ impl Radio {
             // Preamble length 32-bit zero
             // Exclude CRC
             // No TERM field
-            radio
-                .pcnf0
-                .write(|w| w.lflen().bits(8).plen()._32bit_zero().crcinc().set_bit());
-            radio
-                .pcnf1
-                .write(|w| w.maxlen().bits(MAX_PACKET_LENGHT_REG));
+            radio.pcnf0.write(|w| {
+                w.lflen()
+                    .bits(8)
+                    .s0len()
+                    .clear_bit()
+                    .s1len()
+                    .bits(0)
+                    .s1incl()
+                    .clear_bit()
+                    .cilen()
+                    .bits(0)
+                    .plen()
+                    ._32bit_zero()
+                    .crcinc()
+                    .set_bit()
+            });
+            radio.pcnf1.write(|w| {
+                w.maxlen()
+                    .bits(MAX_PACKET_LENGHT_REG)
+                    .statlen()
+                    .bits(0)
+                    .balen()
+                    .bits(0)
+                    .endian()
+                    .clear_bit()
+                    .whiteen()
+                    .clear_bit()
+            });
             // Configure clear channel assessment to sane default
             radio.ccactrl.write(|w| {
                 w.ccamode()
@@ -154,6 +177,8 @@ impl Radio {
             // Configure MAC header match
             radio.mhrmatchmas.write(|w| w.bits(MHMU_MASK));
             radio.mhrmatchconf.write(|w| w.bits(0));
+            // Start of frame delimiter
+            radio.sfd.write(|w| w.sfd().bits(SFD_DEFAULT));
         }
         // Set transmission power to 4dBm
         radio.txpower.write(|w| w.txpower().pos4d_bm());
@@ -457,15 +482,13 @@ impl Radio {
         assert!(buffer.len() >= MAX_PACKET_LENGHT);
         // PHYEND event signal
         let length = if self.radio.events_phyend.read().events_phyend().bit_is_set() {
-            // Clear interrupt
-            self.radio.events_phyend.reset();
             // PHR contains length of the packet in the low 7 bits, MSB
             // indicates if this packet is a 802.11.4 packet or not
             // 16-bit CRC has been removed, 1 octet LQI has been added to the end
             let phr = self.buffer[0];
             // Clear PHR so we do not read old data next time
             self.buffer[0] = 0;
-            if self.state & STATE_SEND == STATE_SEND {
+            let length = if self.state & STATE_SEND == STATE_SEND {
                 0
             } else {
                 let length = if (phr & 0x80) == 0 {
@@ -478,7 +501,10 @@ impl Radio {
                     buffer[1..=length].copy_from_slice(&self.buffer[1..=length]);
                 }
                 length
-            }
+            };
+            // Clear interrupt
+            self.radio.events_phyend.reset();
+            length
         } else {
             0
         };
@@ -490,7 +516,6 @@ impl Radio {
             .bit_is_set()
         {
             // Errata 204: Always use DISABLE when switching from TX to RX.
-            self.radio.events_disabled.reset();
             if self.state & STATE_SEND == STATE_SEND {
                 // Re-enable receive after sending a packet
                 self.radio.shorts.reset();
@@ -500,12 +525,15 @@ impl Radio {
                 self.radio.tasks_rxen.write(|w| w.tasks_rxen().set_bit());
                 self.state = 0;
             }
+            // Clear interrupt
+            self.radio.events_disabled.reset();
         }
         if self.radio.events_ready.read().events_ready().bit_is_set() {
-            self.radio.events_ready.reset();
             self.radio
                 .packetptr
                 .write(|w| unsafe { w.bits(self.buffer.as_ptr() as u32) });
+            // Clear interrupt
+            self.radio.events_ready.reset();
         }
         if self
             .radio
@@ -514,8 +542,9 @@ impl Radio {
             .events_ccabusy()
             .bit_is_set()
         {
-            self.radio.events_ccabusy.reset();
             self.receive_prepare();
+            // Clear interrupt
+            self.radio.events_ccabusy.reset();
         }
         length
     }
