@@ -8,7 +8,7 @@ See [documentation](https://docs.rs/nrf52-radio-802154).
 
 ## Compatability
 
-Tested with nRF52840-DK, nRF52840-dongle and nRF52840-MDK.
+Tested with nRF52840-DK, nRF52840-MDK and nRF52833-DK.
 
 ## License
 
