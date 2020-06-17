@@ -28,10 +28,16 @@ use core::sync::atomic::{compiler_fence, Ordering};
 
 use crate::pac::{generic::Variant, radio, RADIO};
 
+// RX-TX turn-around time in symbols
+const TURMAROUND_TIME_SYMBOLS: u32 = 12;
+
+/// Back-off time period in symbols
+const BACKOFF_PERIOD_SYMBOLS: u32 = 20;
+
 /// Number of short interframe spacing (SIFS) symbols
 const SIFS_SYMBOLS: u32 = 12;
 /// Number of acknowledge interframe spacing (AIFS) symbols
-const AIFS_SYMBOLS: u32 = 32;
+const AIFS_SYMBOLS: u32 = TURMAROUND_TIME_SYMBOLS + BACKOFF_PERIOD_SYMBOLS;
 /// Number of long interframe spacing (LIFS) symbols
 const LIFS_SYMBOLS: u32 = 40;
 
@@ -90,18 +96,19 @@ fn configure_interrupts(radio: &mut RADIO) {
     clear_interrupts(radio);
     // Enable interrupts for READY, DISABLED, CCABUSY and PHYEND
     radio.intenset.write(|w| {
-        w.ready()
-            .set()
-            .disabled()
-            .set()
-            .ccabusy()
-            .set()
-            .phyend()
-            .set()
+        w.ready().set()
+            .disabled().set()
+            .ccabusy().set()
+            .phyend().set()
+            .bcmatch().set()
     });
 }
 
 pub const STATE_SEND: u32 = 1 << 0;
+
+pub enum Error {
+    CcaBusy,
+}
 
 /// # 802.15.4 PHY layer implementation for nRF Radio
 ///
@@ -179,6 +186,7 @@ impl Radio {
             radio.mhrmatchconf.write(|w| w.bits(0));
             // Start of frame delimiter
             radio.sfd.write(|w| w.sfd().bits(SFD_DEFAULT));
+            radio.bcc.write(|w| w.bcc().bits(24));
         }
         // Set transmission power to 4dBm
         radio.txpower.write(|w| w.txpower().pos4d_bm());
@@ -474,11 +482,11 @@ impl Radio {
     ///
     /// Returns the number of bytes received, or zero if no data could be received.
     ///
-    pub fn receive(&mut self, buffer: &mut PacketBuffer) -> usize {
+    pub fn receive(&mut self, buffer: &mut PacketBuffer) -> Result<usize, Error> {
         self.receive_slice(&mut buffer[..])
     }
 
-    pub fn receive_slice(&mut self, buffer: &mut [u8]) -> usize {
+    pub fn receive_slice(&mut self, buffer: &mut [u8]) -> Result<usize, Error> {
         assert!(buffer.len() >= MAX_PACKET_LENGHT);
         // PHYEND event signal
         let length = if self.radio.events_phyend.read().events_phyend().bit_is_set() {
@@ -545,8 +553,19 @@ impl Radio {
             self.receive_prepare();
             // Clear interrupt
             self.radio.events_ccabusy.reset();
+            return Err(Error::CcaBusy);
         }
-        length
+        if self
+            .radio
+            .events_bcmatch
+            .read()
+            .events_bcmatch()
+            .bit_is_set()
+        {
+            // Clear interrupt
+            self.radio.events_bcmatch.reset();
+        }
+        Ok(length)
     }
 
     /// Queue a transmission of the provided data
