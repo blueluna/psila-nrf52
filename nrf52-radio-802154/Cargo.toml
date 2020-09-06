@@ -12,7 +12,7 @@ documentation = "https://docs.rs/nrf52-radio-802154"
 edition = "2018"
 
 [dependencies]
-ieee802154 = { git = "https://github.com/braun-embedded/rust-ieee802.15.4.git", branch = "master" }
+ieee802154 = "0.3"
 
 [dependencies.nrf52833-pac]
 optional = true
