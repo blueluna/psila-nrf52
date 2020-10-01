@@ -231,6 +231,11 @@ impl Radio {
         (frequency_offset / 5) + 10
     }
 
+    /// Busy sending
+    pub fn is_tx_busy(&self) -> bool {
+        self.state & STATE_SEND == STATE_SEND
+    }
+
     /// Configure transmission power
     ///
     /// Valid power levels are 8-2,0,-4,-8,-12,-16,-20,-40 dBm
