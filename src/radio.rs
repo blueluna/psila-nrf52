@@ -96,11 +96,16 @@ fn configure_interrupts(radio: &mut RADIO) {
     clear_interrupts(radio);
     // Enable interrupts for READY, DISABLED, CCABUSY and PHYEND
     radio.intenset.write(|w| {
-        w.ready().set()
-            .disabled().set()
-            .ccabusy().set()
-            .phyend().set()
-            .bcmatch().set()
+        w.ready()
+            .set()
+            .disabled()
+            .set()
+            .ccabusy()
+            .set()
+            .phyend()
+            .set()
+            .bcmatch()
+            .set()
     });
 }
 
