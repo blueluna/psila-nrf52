@@ -1,4 +1,28 @@
-[workspace]
-members = [
-    "nrf52-radio-802154",
-    ]
+[package]
+name = "psila-nrf52"
+version = "0.0.1"
+authors = ["Erik Svensson <erik.public@gmail.com>"]
+categories = [ "hardware-support", "embedded", "no-std", ]
+description = "nRF52 specific parts for Psila"
+keywords = [ "nrf52", "ieee802154", "WPAN" ]
+license = "MIT"
+readme = "README.md"
+repository="https://github.com/blueluna/psila-nrf52"
+documentation = "https://docs.rs/psila-nrf52"
+edition = "2018"
+
+[dependencies]
+ieee802154 = "0.3"
+
+[dependencies.nrf52833-pac]
+optional = true
+version = "0.9.0"
+
+[dependencies.nrf52840-pac]
+optional = true
+version = "0.9.0"
+
+[features]
+doc = []
+52833 = ["nrf52833-pac"]
+52840 = ["nrf52840-pac"]

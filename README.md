@@ -1,13 +1,15 @@
 # Utilities for nRF52
 
-Verktyg means utilities in swedish.
-
 ## Parts
 
 ### nRF52 802.15.4 radio
 
-`nrf52-radio-802154` is a crate for using the nRF52 radio peripheral in
+The `radio` module implements the nRF52 radio peripheral in
 IEEE 802.15.4 mode.
+
+### nRF52 timer
+
+The `timer` module implements a timer using the nRF52 timer peripheral(s).
 
 ## License
 

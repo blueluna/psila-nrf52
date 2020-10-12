@@ -9,3 +9,4 @@ pub use nrf52833_pac as pac;
 pub use nrf52840_pac as pac;
 
 pub mod radio;
+pub mod timer;
