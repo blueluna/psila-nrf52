@@ -11,11 +11,11 @@
 //!
 //! * SIFS is aMinSIFSPeriod symbols which is 12 for our PHY
 //! * LIFS is aMinLIFSPeriod symbols which is 40 for our PHY
-//! * AIFS is aTurnaroundTime + aUnitBackoffPeriod symbols which is
-//!   12 + 20 → 32 symbols
+//! * AIFS is aTurnaroundTime to aTurnaroundTime + aUnitBackoffPeriod symbols which is
+//!   12 to 12 + 20 → 32 symbols
 //!
 //! The symbol rate for O-QPSK is,
-//! > 62.5 ksymbol/s when operating in the ... 2450 MHz band
+//! > 62.5 ksymbol/s when operating in the 2.4 GHz band
 //!
 //! Each symbol is 16 μs.
 //!
@@ -28,8 +28,8 @@ use core::sync::atomic::{compiler_fence, Ordering};
 
 use crate::pac::{generic::Variant, radio, RADIO};
 
-// RX-TX turn-around time in symbols
-const TURMAROUND_TIME_SYMBOLS: u32 = 12;
+/// RX-TX turn-around time in symbols
+const TURNAROUND_TIME_SYMBOLS: u32 = 12;
 
 /// Back-off time period in symbols
 const BACKOFF_PERIOD_SYMBOLS: u32 = 20;
@@ -37,13 +37,15 @@ const BACKOFF_PERIOD_SYMBOLS: u32 = 20;
 /// Number of short interframe spacing (SIFS) symbols
 const SIFS_SYMBOLS: u32 = 12;
 /// Number of acknowledge interframe spacing (AIFS) symbols
-const AIFS_SYMBOLS: u32 = TURMAROUND_TIME_SYMBOLS + BACKOFF_PERIOD_SYMBOLS;
+const AIFS_SYMBOLS: u32 = TURNAROUND_TIME_SYMBOLS;
 /// Number of long interframe spacing (LIFS) symbols
 const LIFS_SYMBOLS: u32 = 40;
 
 /// Microseconds (μs) per symbol
 const MICROSECONDS_PER_SYMBOL: u32 = 16;
 
+/// Backoff period in microseconds
+const BACKOFF_PERIOD_MICROSECONDS: u32 = MICROSECONDS_PER_SYMBOL * BACKOFF_PERIOD_SYMBOLS;
 /// Acknowledge interframe spacing (AIFS) in microseconds
 const AIFS_MICROSECONDS: u32 = MICROSECONDS_PER_SYMBOL * AIFS_SYMBOLS;
 /// Short interframe spacing (SIFS) in microseconds
@@ -51,48 +53,30 @@ const SIFS_MICROSECONDS: u32 = MICROSECONDS_PER_SYMBOL * SIFS_SYMBOLS;
 /// Long interframe spacing (LIFS) in microseconds
 const LIFS_MICROSECONDS: u32 = MICROSECONDS_PER_SYMBOL * LIFS_SYMBOLS;
 
+/// Maximum length of a 802.15.4 package
 const MAX_PACKET_LENGHT_REG: u8 = 129;
+
 /// Max packet length, 127 bytes according to the standard
 /// Here the length byte and LQI byte is added
 pub const MAX_PACKET_LENGHT: usize = MAX_PACKET_LENGHT_REG as usize;
-pub const CRC_POLYNOMIAL: u32 = 0x0001_1021;
-pub const CCA_ED_THRESHOLD_DEFAULT: u8 = 20;
-pub const CCA_CORR_THRESHOLD_DEFAULT: u8 = 20;
-pub const CCA_CORR_LIMIT_DEFAULT: u8 = 2;
-pub const SFD_DEFAULT: u8 = 0xA7;
-pub const MHMU_MASK: u32 = 0xff0_00700;
 
+const CRC_POLYNOMIAL: u32 = 0x0001_1021;
+const CCA_ED_THRESHOLD_DEFAULT: u8 = 20;
+const CCA_CORR_THRESHOLD_DEFAULT: u8 = 20;
+const CCA_CORR_LIMIT_DEFAULT: u8 = 2;
+const SFD_DEFAULT: u8 = 0xA7;
+const MHMU_MASK: u32 = 0xff0_00700;
+
+/// Byte array capable of holding a 802.15.4 package
 pub type PacketBuffer = [u8; MAX_PACKET_LENGHT as usize];
 
-pub const EVENT_READY: u32 = 1;
-pub const EVENT_ADDRESS: u32 = 1 << 1;
-pub const EVENT_PAYLOAD: u32 = 1 << 2;
-pub const EVENT_END: u32 = 1 << 3;
-pub const EVENT_DISABLED: u32 = 1 << 4;
-pub const EVENT_DEVMATCH: u32 = 1 << 5;
-pub const EVENT_DEVMISS: u32 = 1 << 6;
-pub const EVENT_RSSIEND: u32 = 1 << 7;
-pub const EVENT_BCMATCH: u32 = 1 << 8;
-pub const EVENT_CRCOK: u32 = 1 << 9;
-pub const EVENT_CRCERROR: u32 = 1 << 10;
-pub const EVENT_FRAMESTART: u32 = 1 << 11;
-pub const EVENT_EDEND: u32 = 1 << 12;
-pub const EVENT_EDSTOPPED: u32 = 1 << 13;
-pub const EVENT_CCAIDLE: u32 = 1 << 14;
-pub const EVENT_CCABUSY: u32 = 1 << 15;
-pub const EVENT_CCASTOPPED: u32 = 1 << 16;
-pub const EVENT_RATEBOOST: u32 = 1 << 17;
-pub const EVENT_TXREADY: u32 = 1 << 18;
-pub const EVENT_RXREADY: u32 = 1 << 19;
-pub const EVENT_MHRMATCH: u32 = 1 << 20;
-pub const EVENT_PHYEND: u32 = 1 << 21;
-
+/// Clear all interrupts on the radio
 fn clear_interrupts(radio: &mut RADIO) {
     radio.intenclr.write(|w| unsafe { w.bits(0xffff_ffff) });
 }
 
+/// Configure interrupts
 fn configure_interrupts(radio: &mut RADIO) {
-    // Configure interrupts
     clear_interrupts(radio);
     // Enable interrupts for READY, DISABLED, CCABUSY and PHYEND
     radio.intenset.write(|w| {
@@ -109,9 +93,12 @@ fn configure_interrupts(radio: &mut RADIO) {
     });
 }
 
+/// State flag for when the radio is transmitting
 pub const STATE_SEND: u32 = 1 << 0;
 
+/// Errors returned by Radio
 pub enum Error {
+    /// Clear channel assesment returned that the channel is busy
     CcaBusy,
 }
 
@@ -120,8 +107,11 @@ pub enum Error {
 /// This is work in progress.
 ///
 pub struct Radio {
+    /// The nRF52 radio peripheral
     radio: RADIO,
+    /// Internal buffer
     buffer: PacketBuffer,
+    /// Internal state
     state: u32,
 }
 
@@ -264,179 +254,6 @@ impl Radio {
         }
     }
 
-    pub fn events(&self) -> u32 {
-        let mut events = 0;
-        if self.radio.events_ready.read().events_ready().bit_is_set() {
-            events |= EVENT_READY;
-        }
-        if self
-            .radio
-            .events_address
-            .read()
-            .events_address()
-            .bit_is_set()
-        {
-            events |= EVENT_ADDRESS;
-        }
-        if self
-            .radio
-            .events_payload
-            .read()
-            .events_payload()
-            .bit_is_set()
-        {
-            events |= EVENT_PAYLOAD;
-        }
-        if self.radio.events_end.read().events_end().bit_is_set() {
-            events |= EVENT_END;
-        }
-        if self
-            .radio
-            .events_disabled
-            .read()
-            .events_disabled()
-            .bit_is_set()
-        {
-            events |= EVENT_DISABLED;
-        }
-        if self
-            .radio
-            .events_devmatch
-            .read()
-            .events_devmatch()
-            .bit_is_set()
-        {
-            events |= EVENT_DEVMATCH;
-        }
-        if self
-            .radio
-            .events_devmiss
-            .read()
-            .events_devmiss()
-            .bit_is_set()
-        {
-            events |= EVENT_DEVMISS;
-        }
-        if self
-            .radio
-            .events_rssiend
-            .read()
-            .events_rssiend()
-            .bit_is_set()
-        {
-            events |= EVENT_RSSIEND;
-        }
-        if self
-            .radio
-            .events_bcmatch
-            .read()
-            .events_bcmatch()
-            .bit_is_set()
-        {
-            events |= EVENT_BCMATCH;
-        }
-        if self.radio.events_crcok.read().events_crcok().bit_is_set() {
-            events |= EVENT_CRCOK;
-        }
-        if self
-            .radio
-            .events_crcerror
-            .read()
-            .events_crcerror()
-            .bit_is_set()
-        {
-            events |= EVENT_CRCERROR;
-        }
-        if self
-            .radio
-            .events_framestart
-            .read()
-            .events_framestart()
-            .bit_is_set()
-        {
-            events |= EVENT_FRAMESTART;
-        }
-        if self.radio.events_edend.read().events_edend().bit_is_set() {
-            events |= EVENT_EDEND;
-        }
-        if self
-            .radio
-            .events_edstopped
-            .read()
-            .events_edstopped()
-            .bit_is_set()
-        {
-            events |= EVENT_EDSTOPPED;
-        }
-        if self
-            .radio
-            .events_ccaidle
-            .read()
-            .events_ccaidle()
-            .bit_is_set()
-        {
-            events |= EVENT_CCAIDLE;
-        }
-        if self
-            .radio
-            .events_ccabusy
-            .read()
-            .events_ccabusy()
-            .bit_is_set()
-        {
-            events |= EVENT_CCABUSY;
-        }
-        if self
-            .radio
-            .events_ccastopped
-            .read()
-            .events_ccastopped()
-            .bit_is_set()
-        {
-            events |= EVENT_CCASTOPPED;
-        }
-        if self
-            .radio
-            .events_rateboost
-            .read()
-            .events_rateboost()
-            .bit_is_set()
-        {
-            events |= EVENT_RATEBOOST;
-        }
-        if self
-            .radio
-            .events_txready
-            .read()
-            .events_txready()
-            .bit_is_set()
-        {
-            events |= EVENT_TXREADY;
-        }
-        if self
-            .radio
-            .events_rxready
-            .read()
-            .events_rxready()
-            .bit_is_set()
-        {
-            events |= EVENT_RXREADY;
-        }
-        if self
-            .radio
-            .events_mhrmatch
-            .read()
-            .events_mhrmatch()
-            .bit_is_set()
-        {
-            events |= EVENT_MHRMATCH;
-        }
-        if self.radio.events_phyend.read().events_phyend().bit_is_set() {
-            events |= EVENT_PHYEND;
-        }
-        events
-    }
-
     // Enter the disabled state
     fn enter_disabled(&mut self) {
         if self.state() != radio::state::STATE_A::DISABLED {
@@ -496,6 +313,22 @@ impl Radio {
         self.receive_slice(&mut buffer[..])
     }
 
+    /// Read received data into byte slice
+    ///
+    /// ```notrust
+    /// ------------------------
+    /// | size | payload | LQI |
+    /// ------------------------
+    ///    1        *       1     octets
+    /// ```
+    ///
+    /// The first octet in the buffer is the size of the packet (including size and LQI). Then
+    /// comes the payload. Last octet is the link quality indicator (LQI).
+    ///
+    /// # Return
+    ///
+    /// Returns the number of bytes received, or zero if no data could be received.
+    ///
     pub fn receive_slice(&mut self, buffer: &mut [u8]) -> Result<usize, Error> {
         assert!(buffer.len() >= MAX_PACKET_LENGHT);
         // PHYEND event signal

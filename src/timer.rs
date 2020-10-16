@@ -1,11 +1,24 @@
+//! Timer functions for the nRF52 TIMER peripheral
+
 use crate::pac::{TIMER0, TIMER1};
 
+/// Timer trait
 pub trait Timer {
+    /// Initialise and start the TIMER.
+    /// Will initialize the TIMER to a 1us resolution timer.
+    ///
+    /// CC0 is used as a free-running timer.
+    /// CC1 to CC3 can be used to trigger events when time has elapsed.
     fn init(&mut self);
+    /// Configure compare CC[`id`] to fire after `elapsed` microseconds.
     fn fire_in(&mut self, id: usize, elapsed: u32);
+    /// Disable events for compare CC[`id`]. 
     fn stop(&mut self, id: usize);
+    /// Get the current calue of the free-running timer.
     fn now(&self) -> u32;
+    /// Acknowledge a event on CC[`id`].
     fn ack_compare_event(&mut self, id: usize);
+    /// Check if a event has occured on CC[`id`].
     fn is_compare_event(&self, id: usize) -> bool;
 }
 
