@@ -26,7 +26,7 @@
 
 use core::sync::atomic::{compiler_fence, Ordering};
 
-use crate::pac::{generic::Variant, radio, RADIO};
+use crate::pac::{radio, RADIO};
 
 /// RX-TX turn-around time in symbols
 const TURNAROUND_TIME_SYMBOLS: u32 = 12;
@@ -278,8 +278,8 @@ impl Radio {
     /// Get the radio state
     pub fn state(&mut self) -> radio::state::STATE_A {
         match self.radio.state.read().state().variant() {
-            Variant::Val(state) => state,
-            Variant::Res(_) => unreachable!(),
+            Some(state) => state,
+            None => unreachable!(),
         }
     }
 
