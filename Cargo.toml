@@ -21,7 +21,12 @@ version = "0.12"
 optional = true
 version = "0.12"
 
+[dependencies.microbit-v2]
+optional = true
+version = "0.13"
+
 [features]
 doc = []
 52833 = ["nrf52833-pac"]
 52840 = ["nrf52840-pac"]
+microbit = ["microbit-v2"]

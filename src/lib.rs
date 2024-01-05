@@ -18,5 +18,8 @@ pub use nrf52833_pac as pac;
 #[cfg(feature = "52840")]
 pub use nrf52840_pac as pac;
 
+#[cfg(feature = "microbit")]
+pub use microbit::pac as pac;
+
 pub mod radio;
 pub mod timer;
