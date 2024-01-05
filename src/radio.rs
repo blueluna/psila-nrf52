@@ -411,6 +411,39 @@ impl Radio {
         Ok(length)
     }
 
+    /// Queue a transmission of the provided data, do not use CCA
+    ///
+    /// `data` should contain the packet payload to be sent without the PHR and FCS.
+    ///
+    /// If the transmission succeeds the PHYEND event shall signal.
+    ///
+    /// # Return
+    ///
+    /// Returns the number of bytes queued for transmission, or zero if no data could be sent.
+    ///
+    pub fn queue_transmission_no_cca(&mut self, data: &[u8]) -> usize {
+        self.enter_disabled();
+        let data_length = data.len();
+        let tx_length = data_length + 2; // The radio will add FCS, two octets
+        assert!(tx_length < (MAX_PACKET_LENGHT - 1) as usize);
+        self.buffer[0] = tx_length as u8;
+        self.buffer[1..(tx_length - 1)].copy_from_slice(data);
+        // Configure shortcuts
+        //
+        // The radio goes through following states when sending a 802.15.4 packet
+        //
+        // enable TX → start TX → TX → end (PHYEND) → disabled
+        self.radio.shorts.reset();
+        self.radio
+            .shorts
+            .write(|w| w.txready_start().enabled().phyend_disable().enabled());
+        compiler_fence(Ordering::Release);
+        // Start task
+        self.radio.tasks_txen.write(|w| w.tasks_txen().set_bit());
+        self.state |= STATE_SEND;
+        data_length
+    }
+
     /// Queue a transmission of the provided data
     ///
     /// `data` should contain the packet payload to be sent without the PHR and FCS.
@@ -434,7 +467,7 @@ impl Radio {
         //
         // The radio goes through following states when sending a 802.15.4 packet
         //
-        // enable RX → ramp up RX → clear channel assesment (CCA) → CCA result
+        // enable RX → ramp up RX → clear channel assessment (CCA) → CCA result
         // CCA idle → enable TX → start TX → TX → end (PHYEND) → disabled
         //
         // CCA might end up in the event CCABUSY in which there will be no transmission

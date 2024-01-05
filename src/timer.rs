@@ -12,7 +12,7 @@ pub trait Timer {
     fn init(&mut self);
     /// Configure compare CC[`id`] to fire after `elapsed` microseconds.
     fn fire_in(&mut self, id: usize, elapsed: u32);
-    /// Disable events for compare CC[`id`]. 
+    /// Disable events for compare CC[`id`].
     fn stop(&mut self, id: usize);
     /// Get the current calue of the free-running timer.
     fn now(&self) -> u32;
